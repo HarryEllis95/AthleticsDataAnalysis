@@ -1,11 +1,14 @@
 import os
-from math import floor, ceil
-
+from math import ceil
+import time
 import pandas as pd
 import requests
 from bs4 import BeautifulSoup
 
-def fetch_toplist(event_url: str, amount: int = 100, output_folder: str | None = None) -> pd.DataFrame | None:
+from src.data_format import normalize_marks
+
+
+def fetch_toplist(event_url: str, amount: int = 100, delay: float = 0.1, output_folder: str | None = None) -> pd.DataFrame | None:
     """
     Fetches an athletics toplist table from a World Athletics event page and saves it to CSV.
 
@@ -26,15 +29,20 @@ def fetch_toplist(event_url: str, amount: int = 100, output_folder: str | None =
         }
 
         paged_url = f"{event_url}?page={page_num}"
-        response = requests.get(paged_url, headers=headers, timeout=20)
+        try:
+            response = requests.get(paged_url, headers=headers, timeout=20)
+            response.raise_for_status()
+        except requests.RequestException as e:
+            print(f"Failed to fetch {paged_url}: {e}")
+            continue
 
-        response.raise_for_status()  # raises an error if status != 200
+        time.sleep(delay)
         soup = BeautifulSoup(response.text, "html.parser")
 
         # Find the main results table body
         tbody = soup.find("tbody")
         if not tbody:
-            print("No <tbody> found. Page structure might have changed.")
+            print("No table body found for {paged_url}")
             return None
 
         rows_data = []
@@ -69,6 +77,7 @@ def fetch_toplist(event_url: str, amount: int = 100, output_folder: str | None =
 
     # convert to pandas DataFrame
     df = pd.DataFrame(all_rows)
+    df = normalize_marks(df)
 
     if output_folder:
         os.makedirs(output_folder, exist_ok=True)
@@ -82,6 +91,9 @@ def fetch_toplist(event_url: str, amount: int = 100, output_folder: str | None =
 
     return df
 
+def build_event_url(event_category: str, event_name: str, gender: str, year: int) -> str:
+    base_url = "https://worldathletics.org/records/toplists"
+    return f"{base_url}/{event_category}/{event_name}/all/{gender}/senior/{year}"
 
 if __name__ == "__main__":
     # test run
