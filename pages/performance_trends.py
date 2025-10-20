@@ -2,51 +2,32 @@ import pandas as pd
 import matplotlib.pyplot as plt
 import streamlit as st
 from src.data_fetch import fetch_toplist, build_event_url
+from src.data_format import EVENT_MAPPINGS
 
 # Page config
-st.set_page_config(page_title = "Athletics Performance Trends", layout="wide")
+st.set_page_config(page_title = "Athletics Performance Trends", layout="wide", initial_sidebar_state="collapsed")
 st.title("Athletics Performance Trends")
-st.markdown(
-    "Analyse how average top performances in world athletics events evolve over time."
-)
+st.markdown("Analyse how average top performances in world athletics events evolve over time.")
 
 # User Controls
-st.sidebar.header("Analysis Settings")
+st.markdown("### ⚙️ Configure Analysis")
 
-event_category = st.sidebar.selectbox(
-    "Event Category",
-    ["sprints", "hurdles", "middle-distance", "long-distance", "jumps", "throws"],
-    index=0
-)
-
-event_name = st.sidebar.selectbox(
-    "Event Name",
-    [
-        "100-metres",
-        "200-metres",
-        "400-metres",
-        "800-metres",
-        "1500-metres",
-        "5000-metres",
-        "long-jump",
-        "triple-jump",
-        "shot-put",
-    ],
-    index=0,
-)
-
-gender = st.sidebar.radio("Gender", ["men", "women"], horizontal=True)
-
-# define year range
-start_year, end_year =  st.sidebar.select_slider(
-    "Select Year Range",
-    options=list(range(2000, 2025)),
-    value=(2015, 2024)
-)
-
-top_x = st.sidebar.number_input(
-    "Average over Top X Performances", min_value=10, max_value=1000, value=100, step=10
-)
+col1, col2, col3 = st.columns([2,2,1])
+with col1:
+    gender = st.radio("Gender", ["men", "women"], horizontal=True)
+    filtered_events = [name for name, (_, _, g) in EVENT_MAPPINGS.items() if g in ("both", gender)]
+    event_display_name = st.selectbox("Event", filtered_events, index=0)
+    event_url_name, event_category, _ = EVENT_MAPPINGS[event_display_name]
+with col2:
+    # define year range
+    start_year, end_year = st.select_slider(
+        "Select Year Range",
+        options=list(range(2000, 2025)),
+        value=(2015, 2024)
+    )
+with col3:
+    top_x = st.number_input("Top X Performances", min_value=10, max_value=1000, value=100, step=10)
+    run_analysis = st.button("Run Analysis")
 
 @st.cache_data(show_spinner=False)
 def get_data_for_year(event_category: str, event_name: str, gender: str, year: int, top_x: int):
@@ -60,12 +41,12 @@ def get_data_for_year(event_category: str, event_name: str, gender: str, year: i
     return {"Year": year, "AverageMark": avg_mark}
 
 # Main analysis
-if st.button("Run Analysis"):
+if run_analysis:
     st.markdown(
-        f"### 📊 Comparing average of top **{top_x}** performances for **{gender}'s {event_name.replace('-', ' ')}** between **{start_year}** and **{end_year}**"
+        f"### Comparing average of top **{top_x}** performances for **{gender}'s {event_display_name.replace('-', ' ')}** between **{start_year}** and **{end_year}**"
     )
 
-    years = range(start_year, end_year)
+    years = range(start_year, end_year + 1)
     data_records = []
 
     # Spinner while fetching
@@ -73,7 +54,7 @@ if st.button("Run Analysis"):
     with st.spinner("Fetching data..."):
         for year in years:
             placeholder.markdown(f"⏳ Fetching **{year}**...")
-            result = get_data_for_year(event_category, event_name, gender, year, top_x)
+            result = get_data_for_year(event_category, event_url_name, gender, year, top_x)
             if result:
                 data_records.append(result)
         placeholder.empty()
@@ -85,10 +66,10 @@ if st.button("Run Analysis"):
         ax.plot(trend_df["Year"], trend_df["AverageMark"], marker="o", linewidth=2, color="tab:blue")
 
         ax.set_title(
-            f"Average of Top {top_x} {gender.title()} {event_name.replace('-', ' ')} Performances ({start_year}–{end_year})"
+            f"Average of Top {top_x} {gender.title()} {event_display_name.replace('-', ' ')} Performances ({start_year}–{end_year})"
         )
         ax.set_xlabel("Year")
-        ax.set_ylabel("Average Time (seconds)" if "metres" in event_name else "Average Distance")
+        ax.set_ylabel("Average Time (seconds)" if "metres" in event_display_name else "Average Distance")
         ax.grid(True)
 
         st.pyplot(fig)
@@ -96,6 +77,6 @@ if st.button("Run Analysis"):
         with st.expander("View Data Table"):
             st.dataframe(trend_df, use_container_width=True)
     else:
-        st.warning("⚠️ No data available — please check site connectivity or try another event.")
+        st.warning("No data available — please check site connectivity or try another event.")
 else:
-    st.info("👈 Configure your settings on the left and click **Run Analysis** to begin.")
+    st.info("Configure your settings and click **Run Analysis** to begin.")
