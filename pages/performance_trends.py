@@ -81,7 +81,14 @@ if run_analysis:
         with st.expander("View Athlete Rankings"):
             athlete_display = format_athlete_best_results(all_results_df)
             if not athlete_display.empty:
-                st.dataframe(athlete_display, width=800, hide_index=True)
+                st.dataframe(athlete_display.style.format({"Best Performance": "{:.2f}"}), width=1200, hide_index=True,
+                             column_config={
+                                 "Profile Link": st.column_config.LinkColumn(
+                                     label="Profile",
+                                     display_text="🔗"
+                                 )
+                             }
+                             )
             else:
                 st.warning("No athlete results to display.")
 
