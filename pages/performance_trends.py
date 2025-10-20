@@ -3,6 +3,7 @@ import matplotlib.pyplot as plt
 import streamlit as st
 from src.data_fetch import fetch_toplist, build_event_url
 from src.data_format import EVENT_MAPPINGS
+from datetime import datetime
 
 # Page config
 st.set_page_config(page_title = "Athletics Performance Trends", layout="wide", initial_sidebar_state="collapsed")
@@ -12,23 +13,26 @@ st.markdown("Analyse how average top performances in world athletics events evol
 # User Controls
 st.markdown("### ⚙️ Configure Analysis")
 
-col1, col2, col3 = st.columns([2,2,1])
-with col1:
-    gender = st.radio("Gender", ["men", "women"], horizontal=True)
-    filtered_events = [name for name, (_, _, g) in EVENT_MAPPINGS.items() if g in ("both", gender)]
-    event_display_name = st.selectbox("Event", filtered_events, index=0)
-    event_url_name, event_category, _ = EVENT_MAPPINGS[event_display_name]
-with col2:
-    # define year range
-    start_year, end_year = st.select_slider(
-        "Select Year Range",
-        options=list(range(2000, 2025)),
-        value=(2015, 2024)
-    )
-with col3:
-    top_x = st.number_input("Top X Performances", min_value=10, max_value=1000, value=100, step=10)
-    run_analysis = st.button("Run Analysis")
+gender = st.radio("Gender", ["men", "women"], horizontal=True)
 
+filtered_events = [name for name, (_, _, g) in EVENT_MAPPINGS.items() if g in ("both", gender)]
+event_display_name = st.selectbox("Event", filtered_events, index=0, width=400)
+event_url_name, event_category, _ = EVENT_MAPPINGS[event_display_name]
+
+current_year = datetime.now().year
+years = list(range(2000, current_year + 1))
+subcol1, subcol2 = st.columns(2, gap="small")
+with subcol1:
+    start_year = st.selectbox("Start Year", years, index=0, key="start_year", label_visibility="visible", width=200)
+with subcol2:
+    end_year = st.selectbox("End Year", years, index=len(years) - 1, key="end_year", label_visibility="visible", width=200)
+
+top_x = st.number_input("Top X Performances", min_value=10, max_value=1000, value=100, step=10, width=400)
+
+run_analysis = st.button("Run Analysis")
+
+# use streamlits in built caching - basically if func is called again with same arguments,
+# don't rerun just return saved cahced result
 @st.cache_data(show_spinner=False)
 def get_data_for_year(event_category: str, event_name: str, gender: str, year: int, top_x: int):
     """Fetch and calculate average for a single year."""
@@ -75,7 +79,7 @@ if run_analysis:
         st.pyplot(fig)
 
         with st.expander("View Data Table"):
-            st.dataframe(trend_df, use_container_width=True)
+            st.dataframe(trend_df, width='content')
     else:
         st.warning("No data available — please check site connectivity or try another event.")
 else:

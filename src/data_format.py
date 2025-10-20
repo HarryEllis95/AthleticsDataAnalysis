@@ -37,7 +37,8 @@ EVENT_MAPPINGS = {
     "Marathon": ("marathon", "road-running", "both"),
 
     # Race Walks
-    "50 Kilometres Race Walk": ("50-kilometres-race-walk", "race-walks", "both"),
+    "50 Kilometres Race Walk": ("50-kilometres-race-walk", "race-walks", "men"),
+    "20 Kilometres Race Walk": ("20-kilometres-race-walk", "race-walks", "women"),
 
     # Hurdles
     "60 Metres Hurdles": ("60-metres-hurdles", "hurdles", "both"),
@@ -59,11 +60,10 @@ EVENT_MAPPINGS = {
     "Javelin Throw": ("javelin-throw", "throws", "both"),
 
     # Combined Events
-    "Pentathlon": ("pentathlon", "combined-events", "women"),
     "Heptathlon": ("heptathlon", "combined-events", "women"),
     "Decathlon": ("decathlon", "combined-events", "men"),
 
     # Relays
-    "4x100 Metres Relay": ("4x100-metres-relay", "relays"),
-    "4x400 Metres Relay": ("4x400-metres-relay", "relays"),
+    "4x100 Metres Relay": ("4x100-metres-relay", "relays", "both"),
+    "4x400 Metres Relay": ("4x400-metres-relay", "relays", "both"),
 }
