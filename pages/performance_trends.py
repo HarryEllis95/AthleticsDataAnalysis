@@ -2,8 +2,10 @@ import pandas as pd
 import matplotlib.pyplot as plt
 import streamlit as st
 from src.data_fetch import fetch_toplist, build_event_url
-from src.data_format import EVENT_MAPPINGS
+from src.data_format import EVENT_MAPPINGS, collect_all_results, format_athlete_best_results
 from datetime import datetime
+import matplotlib.ticker as mticker
+from matplotlib.ticker import MaxNLocator
 
 # Page config
 st.set_page_config(page_title = "Athletics Performance Trends", layout="wide", initial_sidebar_state="collapsed")
@@ -31,18 +33,6 @@ top_x = st.number_input("Top X Performances", min_value=10, max_value=1000, valu
 
 run_analysis = st.button("Run Analysis")
 
-# use streamlits in built caching - basically if func is called again with same arguments,
-# don't rerun just return saved cahced result
-@st.cache_data(show_spinner=False)
-def get_data_for_year(event_category: str, event_name: str, gender: str, year: int, top_x: int):
-    """Fetch and calculate average for a single year."""
-    url = build_event_url(event_category, event_name, gender, year)
-    df = fetch_toplist(url, amount=top_x)
-    if df is None or "Mark" not in df.columns:
-        return None
-    df["Mark"] = pd.to_numeric(df["Mark"], errors="coerce")
-    avg_mark = df["Mark"].head(top_x).mean()
-    return {"Year": year, "AverageMark": avg_mark}
 
 # Main analysis
 if run_analysis:
@@ -51,21 +41,21 @@ if run_analysis:
     )
 
     years = range(start_year, end_year + 1)
-    data_records = []
 
-    # Spinner while fetching
     placeholder = st.empty()
-    with st.spinner("Fetching data..."):
-        for year in years:
-            placeholder.markdown(f"⏳ Fetching **{year}**...")
-            result = get_data_for_year(event_category, event_url_name, gender, year, top_x)
-            if result:
-                data_records.append(result)
-        placeholder.empty()
+
+    def update_progress(year):
+        placeholder.markdown(f"⏳ Fetching **{year}**...")
+    all_results_df, trend_df = collect_all_results(
+        event_category, event_url_name, gender, years, top_x, _progress_callback=update_progress
+    )
+    placeholder.empty()
 
 # Display Resuls
-    if data_records:
-        trend_df = pd.DataFrame(data_records)
+    if trend_df is not None and not trend_df.empty:
+        trend_df["Year"] = trend_df["Year"].astype(int)
+        trend_df["AverageMark"] = trend_df["AverageMark"].round(2)
+
         fig, ax = plt.subplots(figsize=(10, 5))
         ax.plot(trend_df["Year"], trend_df["AverageMark"], marker="o", linewidth=2, color="tab:blue")
 
@@ -74,12 +64,27 @@ if run_analysis:
         )
         ax.set_xlabel("Year")
         ax.set_ylabel("Average Time (seconds)" if "metres" in event_display_name else "Average Distance")
+
+        ax.yaxis.set_major_formatter(mticker.StrMethodFormatter("{x:.2f}"))
+        # x-axis: integer years only
+        ax.xaxis.set_major_locator(MaxNLocator(integer=True))
+        ax.xaxis.set_major_formatter(mticker.StrMethodFormatter("{x:.0f}"))
+
+        trend_df.rename(columns={"AverageMark": "Average Mark"}, inplace=True)
         ax.grid(True)
 
         st.pyplot(fig)
 
         with st.expander("View Data Table"):
-            st.dataframe(trend_df, width='content')
+            st.dataframe(trend_df, width=800, hide_index=True)  # display data table
+
+        with st.expander("View Athlete Rankings"):
+            athlete_display = format_athlete_best_results(all_results_df)
+            if not athlete_display.empty:
+                st.dataframe(athlete_display, width=800, hide_index=True)
+            else:
+                st.warning("No athlete results to display.")
+
     else:
         st.warning("No data available — please check site connectivity or try another event.")
 else:

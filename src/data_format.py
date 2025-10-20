@@ -1,21 +1,65 @@
 import re
 
 import pandas as pd
+import streamlit as st
+from src.data_fetch import build_event_url, fetch_toplist
 
-# shouldn't be bad values included in the call but incase things like 10.84A or 9.97 w appear i.e not pure numerical values, these need cleaning
-# to avoid error
-def normalize_marks(df: pd.DataFrame) -> pd.DataFrame:
-    if "Mark" not in df.columns:
-        return df
+# use streamlits in built caching - basically if func is called again with same arguments,
+# don't rerun just return saved cahced result
+@st.cache_data(show_spinner=False)
+def collect_all_results(event_category: str, event_name: str, gender: str, years: range, top_x: int, _progress_callback=None):
+    """Fetch and combine results for all selected years."""
+    all_year_dfs = []
+    yearly_averages = []
 
-    df["Mark_original"] = df["Mark"]
-    df["Mark"] = (
-        df["Mark"]
-        .astype(str)
-        .str.extract(r"([\d.]+)")   # keep only numbers and decimals regex
-        .astype(float)
+    for year in years:
+        if _progress_callback:
+            _progress_callback(year)
+        url = build_event_url(event_category, event_name, gender, year)
+        df = fetch_toplist(url, amount=top_x)
+        if df is None or "Mark" not in df.columns:
+            continue
+
+        df["Year"] = year
+        all_year_dfs.append(df)
+
+        avg_mark = pd.to_numeric(df["Mark"], errors="coerce").head(top_x).mean()
+        yearly_averages.append({"Year": year, "AverageMark": avg_mark})
+
+    if not all_year_dfs:
+        return None, None
+
+    combined_df = pd.concat(all_year_dfs, ignore_index=True)
+    trend_df = pd.DataFrame(yearly_averages)
+    return combined_df, trend_df
+
+def format_athlete_best_results(all_results_df: pd.DataFrame) -> pd.DataFrame:
+    """Return athletes ranked by their best performance (lowest Mark)."""
+    if all_results_df is None or all_results_df.empty:
+        return pd.DataFrame()
+
+    all_results_df["Mark"] = pd.to_numeric(all_results_df["Mark"], errors="coerce")
+
+    athlete_best = (
+        all_results_df
+        .groupby(["Competitor", "Nat", "Competitor_link"], as_index=False)
+        .agg(BestResult=("Mark", "min"))
+        .sort_values("BestResult", ascending=True)
     )
-    return df
+
+    athlete_best["Profile Link"] = athlete_best.apply(
+        lambda row: f"[Link]({row['Competitor_link']})" if pd.notna(row["Competitor_link"]) else "",
+        axis=1
+    )
+
+    athlete_display = athlete_best[["Competitor", "Nat", "Profile Link", "BestResult"]].rename(
+        columns={
+            "Competitor": "Athlete",
+            "Nat": "Country",
+            "BestResult": "Best Result",
+        }
+    )
+    return athlete_display
 
 EVENT_MAPPINGS = {
     # Sprints

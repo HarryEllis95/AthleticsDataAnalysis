@@ -5,8 +5,6 @@ import pandas as pd
 import requests
 from bs4 import BeautifulSoup
 
-from src.data_format import normalize_marks
-
 
 def fetch_toplist(event_url: str, amount: int = 100, delay: float = 0.1, output_folder: str | None = None) -> pd.DataFrame | None:
     """
@@ -72,12 +70,15 @@ def fetch_toplist(event_url: str, amount: int = 100, delay: float = 0.1, output_
             break
 
     if not all_rows:
-        print("⚠No rows found in table.")
+        print("No rows found in table.")
         return None
 
     # convert to pandas DataFrame
     df = pd.DataFrame(all_rows)
     df = normalize_marks(df)
+
+    # Returned Columns:
+    # ['Rank', 'Mark', 'WIND', 'Competitor_link', 'Competitor', 'DOB', 'Nat', 'Pos', '', 'Venue', 'Date', 'ResultScore', 'Mark_original']
 
     if output_folder:
         os.makedirs(output_folder, exist_ok=True)
@@ -89,6 +90,21 @@ def fetch_toplist(event_url: str, amount: int = 100, delay: float = 0.1, output_
         df.to_csv(filepath, index=False)
         print(f"Saved {len(df)} rows to {filepath}")
 
+    return df
+
+# shouldn't be bad values included in the call but incase things like 10.84A or 9.97 w appear i.e not pure numerical values, these need cleaning
+# to avoid error
+def normalize_marks(df: pd.DataFrame) -> pd.DataFrame:
+    if "Mark" not in df.columns:
+        return df
+
+    df["Mark_original"] = df["Mark"]
+    df["Mark"] = (
+        df["Mark"]
+        .astype(str)
+        .str.extract(r"([\d.]+)")   # keep only numbers and decimals regex
+        .astype(float)
+    )
     return df
 
 def build_event_url(event_category: str, event_name: str, gender: str, year: int) -> str:
