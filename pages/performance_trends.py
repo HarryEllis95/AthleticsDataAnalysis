@@ -1,7 +1,7 @@
-import pandas as pd
 import matplotlib.pyplot as plt
 import streamlit as st
-from src.data_fetch import fetch_toplist, build_event_url
+
+from src.data_analyse import get_event_units
 from src.data_format import EVENT_MAPPINGS, collect_all_results, format_athlete_best_results
 from datetime import datetime
 import matplotlib.ticker as mticker
@@ -62,24 +62,25 @@ if run_analysis:
         ax.set_title(
             f"Average of Top {top_x} {gender.title()} {event_display_name.replace('-', ' ')} Performances ({start_year}–{end_year})"
         )
+        units = get_event_units(event_display_name)
         ax.set_xlabel("Year")
-        ax.set_ylabel("Average Time (seconds)" if "metres" in event_display_name else "Average Distance")
+        ax.set_ylabel(f"Average Mark ({units})")
 
         ax.yaxis.set_major_formatter(mticker.StrMethodFormatter("{x:.2f}"))
         # x-axis: integer years only
         ax.xaxis.set_major_locator(MaxNLocator(integer=True))
         ax.xaxis.set_major_formatter(mticker.StrMethodFormatter("{x:.0f}"))
 
-        trend_df.rename(columns={"AverageMark": "Average Mark"}, inplace=True)
+        trend_df.rename(columns={"AverageMark": "Average Performance"}, inplace=True)
         ax.grid(True)
 
         st.pyplot(fig)
 
         with st.expander("View Data Table"):
-            st.dataframe(trend_df, width=800, hide_index=True)  # display data table
+            st.dataframe(trend_df.style.format({"Average Performance": "{:.2f}"}), width=800, hide_index=True)  # display data table
 
         with st.expander("View Athlete Rankings"):
-            athlete_display = format_athlete_best_results(all_results_df)
+            athlete_display = format_athlete_best_results(all_results_df, event_display_name)
             if not athlete_display.empty:
                 st.dataframe(athlete_display.style.format({"Best Performance": "{:.2f}"}), width=1200, hide_index=True,
                              column_config={

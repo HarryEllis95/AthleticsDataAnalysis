@@ -2,6 +2,8 @@ import re
 
 import pandas as pd
 import streamlit as st
+
+from src.data_analyse import get_event_units
 from src.data_fetch import build_event_url, fetch_toplist
 
 # use streamlits in built caching - basically if func is called again with same arguments,
@@ -13,6 +15,7 @@ def collect_all_results(event_category: str, event_name: str, gender: str, years
     yearly_averages = []
 
     for year in years:
+        # always user to see which year's data is getting fetched
         if _progress_callback:
             _progress_callback(year)
         url = build_event_url(event_category, event_name, gender, year)
@@ -29,34 +32,39 @@ def collect_all_results(event_category: str, event_name: str, gender: str, years
     if not all_year_dfs:
         return None, None
 
-    combined_df = pd.concat(all_year_dfs, ignore_index=True)
-    trend_df = pd.DataFrame(yearly_averages)
+    combined_df = pd.concat(all_year_dfs, ignore_index=True)  # every scraped row for all requested years, concatenated
+    trend_df = pd.DataFrame(yearly_averages)  # one row per year with the average of the top X marks
     return combined_df, trend_df
 
-def format_athlete_best_results(all_results_df: pd.DataFrame) -> pd.DataFrame:
-    """Return athletes ranked by their best performance (lowest Mark)."""
+def format_athlete_best_results(all_results_df: pd.DataFrame, event_display_name: str) -> pd.DataFrame:
+    """Return athletes ranked by their best performance"""
     if all_results_df is None or all_results_df.empty:
         return pd.DataFrame()
 
     all_results_df["Mark"] = pd.to_numeric(all_results_df["Mark"], errors="coerce")
 
+    units = get_event_units(event_display_name)
+    if units in ("metres", "points"):
+        agg_func = "max"       # higher is better
+        ascending = False
+    else:
+        agg_func = "min"       # lower is better
+        ascending = True
+
     athlete_best = (
         all_results_df
         .groupby(["Competitor", "Nat", "Competitor_link"], as_index=False)
-        .agg(BestResult=("Mark", "min"))
-        .sort_values("BestResult", ascending=True)
+        .agg(BestResult=("Mark", agg_func))
+        .sort_values("BestResult", ascending=ascending)
     )
 
-    athlete_best["Profile Link"] = athlete_best.apply(
-        lambda row: f"[Link]({row['Competitor_link']})" if pd.notna(row["Competitor_link"]) else "",
-        axis=1
-    )
+    athlete_best["Profile Link"] = athlete_best["Competitor_link"]
 
     athlete_display = athlete_best[["Competitor", "Nat", "Profile Link", "BestResult"]].rename(
         columns={
             "Competitor": "Athlete",
             "Nat": "Country",
-            "BestResult": "Best Result",
+            "BestResult": "Best Performance",
         }
     )
     return athlete_display

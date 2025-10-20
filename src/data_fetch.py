@@ -5,16 +5,9 @@ import pandas as pd
 import requests
 from bs4 import BeautifulSoup
 
-
+# Scrapes required data
 def fetch_toplist(event_url: str, amount: int = 100, delay: float = 0.1, output_folder: str | None = None) -> pd.DataFrame | None:
-    """
-    Fetches an athletics toplist table from a World Athletics event page and saves it to CSV.
 
-    Returns
-    -------
-    pandas.DataFrame or None
-        The parsed results table if successful, or None if parsing fails.
-    """
     max_pages = 10
     amount_per_page = 100
     pageNum = ceil(amount / amount_per_page)
