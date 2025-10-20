@@ -93,7 +93,7 @@ def fetch_toplist(event_url: str, amount: int = 100, delay: float = 0.1, output_
 
 def build_event_url(event_category: str, event_name: str, gender: str, year: int) -> str:
     base_url = "https://worldathletics.org/records/toplists"
-    return f"{base_url}/{event_category}/{event_name}/all/{gender}/senior/{year}"
+    return f"{base_url}/{event_category}/{event_name}/all/{gender}/senior/{year}?bestResultsOnly=false"
 
 if __name__ == "__main__":
     # test run
