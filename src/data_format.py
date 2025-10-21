@@ -1,43 +1,11 @@
 import re
+import time
 
 import pandas as pd
-import streamlit as st
-
 from src.data_analyse import get_event_units
-from src.data_fetch import build_event_url, fetch_toplist
 
-# use streamlits in built caching - basically if func is called again with same arguments,
-# don't rerun just return saved cahced result
-@st.cache_data(show_spinner=False)
-def collect_all_results(event_category: str, event_name: str, gender: str, years: range, top_x: int, _progress_callback=None):
-    """Fetch and combine results for all selected years."""
-    all_year_dfs = []
-    yearly_averages = []
-
-    for year in years:
-        # always user to see which year's data is getting fetched
-        if _progress_callback:
-            _progress_callback(year)
-        url = build_event_url(event_category, event_name, gender, year)
-        df = fetch_toplist(url, amount=top_x)
-        if df is None or "Mark" not in df.columns:
-            continue
-
-        df["Year"] = year
-        all_year_dfs.append(df)
-
-        avg_mark = pd.to_numeric(df["Mark"], errors="coerce").head(top_x).mean()
-        yearly_averages.append({"Year": year, "AverageMark": avg_mark})
-
-    if not all_year_dfs:
-        return None, None
-
-    combined_df = pd.concat(all_year_dfs, ignore_index=True)  # every scraped row for all requested years, concatenated
-    trend_df = pd.DataFrame(yearly_averages)  # one row per year with the average of the top X marks
-    return combined_df, trend_df
-
+# Return athletes ranked by their best performance
 def format_athlete_best_results(all_results_df: pd.DataFrame, event_display_name: str) -> pd.DataFrame:
-    """Return athletes ranked by their best performance"""
     if all_results_df is None or all_results_df.empty:
         return pd.DataFrame()
 
@@ -69,6 +37,60 @@ def format_athlete_best_results(all_results_df: pd.DataFrame, event_display_name
     )
     return athlete_display
 
+#Convert a time string (H:MM:SS, M:SS.xx, or S.xx) into total seconds (float)
+def parse_time_to_seconds(value: str) -> float | None:
+    if not isinstance(value, str) or not value.strip():
+        return None
+    parts = value.strip().split(":")
+    try:
+        if len(parts) == 3:
+            # H:MM:SS.xx
+            h, m, s = parts
+            return int(h) * 3600 + int(m) * 60 + float(s)
+        elif len(parts) == 2:
+            # M:SS.xx
+            m, s = parts
+            return int(m) * 60 + float(s)
+        else:
+            return float(parts[0])
+    except ValueError:
+        return None
+
+# shouldn't be bad values included in the call but incase things like 10.84A or 9.97 w appear i.e not pure numerical values, these need cleaning
+# to avoid error
+def normalize_marks(df: pd.DataFrame) -> pd.DataFrame:
+    if "Mark" not in df.columns:
+        return df
+
+    df["Mark_original"] = df["Mark"]
+
+    # Try parsing numeric or time-like marks into seconds/metres/points
+    def to_number(val):
+        if isinstance(val, str) and ":" in val:
+            return parse_time_to_seconds(val)
+        else:
+            try:
+                return float(re.search(r"[\d.]+", str(val)).group())
+            except Exception:
+                return None
+
+    df["Mark"] = df["Mark"].apply(to_number)
+    return df
+
+def seconds_to_hms_label(x, pos):
+    if x is None or not isinstance(x, (int, float)):
+        return ""
+    if x >= 3600:
+        return time.strftime("%H:%M:%S", time.gmtime(x))
+    elif x >= 60:
+        m, s = divmod(x, 60)
+        if s.is_integer():
+            return f"{int(m)}:{int(s):02d}"
+        else:
+            return f"{int(m)}:{s:05.2f}"
+    else:
+        return f"{x:.2f}"
+
 EVENT_MAPPINGS = {
     # Sprints
     "60 Metres": ("60-metres", "sprints", "both"),
@@ -79,7 +101,7 @@ EVENT_MAPPINGS = {
     # Middle / Long Distance
     "800 Metres": ("800-metres", "middlelong", "both"),
     "1500 Metres": ("1500-metres", "middlelong", "both"),
-    "Mile": ("mile", "middlelong", "both"),
+    "Mile": ("one-mile", "middlelong", "both"),
     "3000 Metres": ("3000-metres", "middlelong", "both"),
     "5000 Metres": ("5000-metres", "middlelong", "both"),
     "10000 Metres": ("10000-metres", "middlelong", "both"),

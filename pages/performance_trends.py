@@ -1,8 +1,9 @@
 import matplotlib.pyplot as plt
 import streamlit as st
-
+import pandas as pd
 from src.data_analyse import get_event_units
-from src.data_format import EVENT_MAPPINGS, collect_all_results, format_athlete_best_results
+from src.data_fetch import collect_all_results, fetch_year
+from src.data_format import EVENT_MAPPINGS, format_athlete_best_results, seconds_to_hms_label
 from datetime import datetime
 import matplotlib.ticker as mticker
 from matplotlib.ticker import MaxNLocator
@@ -36,60 +37,91 @@ run_analysis = st.button("Run Analysis")
 
 # Main analysis
 if run_analysis:
-    st.markdown(
-        f"### Comparing average of top **{top_x}** performances for **{gender}'s {event_display_name.replace('-', ' ')}** between **{start_year}** and **{end_year}**"
-    )
 
     years = range(start_year, end_year + 1)
-
     placeholder = st.empty()
 
-    def update_progress(year):
-        placeholder.markdown(f"⏳ Fetching **{year}**...")
-    all_results_df, trend_df = collect_all_results(
-        event_category, event_url_name, gender, years, top_x, _progress_callback=update_progress
-    )
+    all_year_dfs = []
+    yearly_averages = []
+
+    for y in years:
+        placeholder.markdown(f"⏳ Fetching **{y}**…")
+        df = fetch_year(event_category, event_url_name, gender, y, top_x)
+        if df is None or "Mark" not in df.columns:
+            continue
+        df["Year"] = y
+        all_year_dfs.append(df)
+        avg_mark = pd.to_numeric(df["Mark"], errors="coerce").head(top_x).mean()
+        yearly_averages.append({"Year": y, "AverageMark": avg_mark})
+
     placeholder.empty()
+
+    all_results_df: pd.DataFrame | None = None
+    trend_df: pd.DataFrame | None = None
+
+    if not all_year_dfs:
+        st.warning("No data available — please check site connectivity or try another event.")
+    else:
+        all_results_df = pd.concat(all_year_dfs, ignore_index=True)
+        trend_df = pd.DataFrame(yearly_averages)
 
 # Display Resuls
     if trend_df is not None and not trend_df.empty:
-        trend_df["Year"] = trend_df["Year"].astype(int)
-        trend_df["AverageMark"] = trend_df["AverageMark"].round(2)
+        units = get_event_units(event_display_name)
 
+        trend_df["Year"] = trend_df["Year"].astype(int)
+        if units != "seconds":
+            trend_df["AverageMark"] = trend_df["AverageMark"].round(2)
+
+        # configure plot
         fig, ax = plt.subplots(figsize=(10, 5))
         ax.plot(trend_df["Year"], trend_df["AverageMark"], marker="o", linewidth=2, color="tab:blue")
 
-        ax.set_title(
-            f"Average of Top {top_x} {gender.title()} {event_display_name.replace('-', ' ')} Performances ({start_year}–{end_year})"
-        )
-        units = get_event_units(event_display_name)
+        ax.set_title(f"Average of Top {top_x} {gender.title()} {event_display_name.replace('-', ' ')} Performances ({start_year}–{end_year})")
         ax.set_xlabel("Year")
-        ax.set_ylabel(f"Average Mark ({units})")
-
-        ax.yaxis.set_major_formatter(mticker.StrMethodFormatter("{x:.2f}"))
-        # x-axis: integer years only
-        ax.xaxis.set_major_locator(MaxNLocator(integer=True))
-        ax.xaxis.set_major_formatter(mticker.StrMethodFormatter("{x:.0f}"))
-
-        trend_df.rename(columns={"AverageMark": "Average Performance"}, inplace=True)
         ax.grid(True)
 
+        if units == "seconds":
+            ax.set_ylabel("Average Time (s)")
+            ax.yaxis.set_major_formatter(mticker.FuncFormatter(seconds_to_hms_label))
+        elif units == "points":
+            ax.set_ylabel(f"Average Points")
+            ax.yaxis.set_major_formatter(mticker.StrMethodFormatter("{x:.0f}"))
+        else:
+            ax.set_ylabel(f"Average Distance ({units})")
+            ax.yaxis.set_major_formatter(mticker.StrMethodFormatter("{x:.2f}"))
+
+        ax.xaxis.set_major_locator(mticker.MaxNLocator(integer=True))
         st.pyplot(fig)
 
-        with st.expander("View Data Table"):
-            st.dataframe(trend_df.style.format({"Average Performance": "{:.2f}"}), width=800, hide_index=True)  # display data table
+        # build display column
+        if units == "seconds":
+            trend_df["AverageMark_display"] = trend_df["AverageMark"].apply(lambda x: seconds_to_hms_label(x, None))
+            table_df = trend_df[["Year", "AverageMark_display"]].rename(columns={"AverageMark_display": "Average Performance"})
+            with st.expander("View Data Table"):
+                st.dataframe(table_df, width=800, hide_index=True)
+        elif units == "points":
+            table_df = trend_df[["Year", "AverageMark"]].rename(columns={"AverageMark": "Average Performance"})
+            with st.expander("View Data Table"):
+                st.dataframe(table_df.style.format({"Average Performance": "{:.0f}"}), width=600, hide_index=True)
+        else:
+            table_df = trend_df[["Year", "AverageMark"]].rename(columns={"AverageMark": "Average Performance"})
+            with st.expander("View Data Table"):
+                st.dataframe(table_df.style.format({"Average Performance": "{:.2f}"}), width=600, hide_index=True)
 
         with st.expander("View Athlete Rankings"):
             athlete_display = format_athlete_best_results(all_results_df, event_display_name)
             if not athlete_display.empty:
-                st.dataframe(athlete_display.style.format({"Best Performance": "{:.2f}"}), width=1200, hide_index=True,
-                             column_config={
-                                 "Profile Link": st.column_config.LinkColumn(
-                                     label="Profile",
-                                     display_text="🔗"
-                                 )
-                             }
-                             )
+                if units == "seconds":
+                    athlete_display["Best Result"] = athlete_display["Best Result"].apply(lambda x: seconds_to_hms_label(x, None))
+                    athlete_display.rename(columns={"Best Result": "Best Performance"}, inplace=True)
+                    st.dataframe(athlete_display, width=1200, hide_index=True, column_config={ "Profile Link": st.column_config.LinkColumn(label="Profile", display_text="🔗")})
+                elif units == "points":
+                    athlete_display.rename(columns={"Best Result": "Best Performance"}, inplace=True)
+                    st.dataframe(athlete_display.style.format({"Best Performance": "{:.0f}"}), width=1200, hide_index=True, column_config={ "Profile Link": st.column_config.LinkColumn(label="Profile", display_text="🔗") })
+                else:
+                    athlete_display.rename(columns={"Best Result": "Best Performance"}, inplace=True)
+                    st.dataframe(athlete_display.style.format({"Best Performance": "{:.2f}"}), width=1200, hide_index=True, column_config={ "Profile Link": st.column_config.LinkColumn(label="Profile", display_text="🔗") })
             else:
                 st.warning("No athlete results to display.")
 
