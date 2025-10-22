@@ -4,8 +4,8 @@ import time
 import pandas as pd
 from src.data_analyse import get_event_units
 
-# Return athletes ranked by their best performance
 def format_athlete_best_results(all_results_df: pd.DataFrame, event_display_name: str) -> pd.DataFrame:
+    """Return athletes ranked by their best performance (Athlete, Country, Best Performance)"""
     if all_results_df is None or all_results_df.empty:
         return pd.DataFrame()
 
@@ -13,10 +13,10 @@ def format_athlete_best_results(all_results_df: pd.DataFrame, event_display_name
 
     units = get_event_units(event_display_name)
     if units in ("metres", "points"):
-        agg_func = "max"       # higher is better
+        agg_func = "max"       # higher is better when distance is involved
         ascending = False
     else:
-        agg_func = "min"       # lower is better
+        agg_func = "min"       # lower is better for time
         ascending = True
 
     athlete_best = (
@@ -37,8 +37,9 @@ def format_athlete_best_results(all_results_df: pd.DataFrame, event_display_name
     )
     return athlete_display
 
-#Convert a time string (H:MM:SS, M:SS.xx, or S.xx) into total seconds (float)
+
 def parse_time_to_seconds(value: str) -> float | None:
+    """Convert a time string (H:MM:SS, M:SS.xx, or S.xx) into total seconds (float)"""
     if not isinstance(value, str) or not value.strip():
         return None
     parts = value.strip().split(":")
@@ -59,6 +60,7 @@ def parse_time_to_seconds(value: str) -> float | None:
 # shouldn't be bad values included in the call but incase things like 10.84A or 9.97 w appear i.e not pure numerical values, these need cleaning
 # to avoid error
 def normalize_marks(df: pd.DataFrame) -> pd.DataFrame:
+    """Clean up the "Mark" column in the raw scraped data so it can be safely treated as numeric"""
     if "Mark" not in df.columns:
         return df
 
@@ -67,17 +69,19 @@ def normalize_marks(df: pd.DataFrame) -> pd.DataFrame:
     # Try parsing numeric or time-like marks into seconds/metres/points
     def to_number(val):
         if isinstance(val, str) and ":" in val:
-            return parse_time_to_seconds(val)
+            return parse_time_to_seconds(val)  # get time in right format
         else:
             try:
-                return float(re.search(r"[\d.]+", str(val)).group())
+                return float(re.search(r"[\d.]+", str(val)).group())    # extract a numeric substring  (i.e 10.84A -> 10.84)
             except Exception:
                 return None
 
     df["Mark"] = df["Mark"].apply(to_number)
     return df
 
+# so when you plot performance over time, the Y-axis automatically shows times in M:SS or H:MM:SS format
 def seconds_to_hms_label(x, pos):
+    """Format seconds back into a readable time string"""
     if x is None or not isinstance(x, (int, float)):
         return ""
     if x >= 3600:
@@ -90,6 +94,17 @@ def seconds_to_hms_label(x, pos):
             return f"{int(m)}:{s:05.2f}"
     else:
         return f"{x:.2f}"
+
+# Format a performance mark according to event units
+def format_performance_value(x: float, units: str) -> str:
+    """format performance mark correctly depending on unit type"""
+    if pd.isna(x):
+        return ""
+    if units == "seconds":
+        return seconds_to_hms_label(x, None)
+    if units == "points":
+        return f"{x:.0f}"
+    return f"{x:.2f}"
 
 EVENT_MAPPINGS = {
     # Sprints

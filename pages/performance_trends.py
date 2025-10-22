@@ -2,11 +2,25 @@ import matplotlib.pyplot as plt
 import streamlit as st
 import pandas as pd
 from src.data_analyse import get_event_units
-from src.data_fetch import collect_all_results, fetch_year
-from src.data_format import EVENT_MAPPINGS, format_athlete_best_results, seconds_to_hms_label
+from src.data_fetch import fetch_year
+from src.data_format import EVENT_MAPPINGS, format_athlete_best_results, seconds_to_hms_label, format_performance_value
 from datetime import datetime
 import matplotlib.ticker as mticker
-from matplotlib.ticker import MaxNLocator
+
+Y_LABELS = {
+    "seconds": "Average Time (s)",
+    "points": "Average Points",
+    "metres": "Average Distance (m)",
+}
+
+Y_FORMATTERS = {
+    "seconds": mticker.FuncFormatter(seconds_to_hms_label),
+    "points": mticker.StrMethodFormatter("{x:.0f}"),
+    "metres": mticker.StrMethodFormatter("{x:.2f}"),
+}
+
+def show_dataframe(df: pd.DataFrame, width: int = 800):
+    st.dataframe(df, width=width, hide_index=True)
 
 # Page config
 st.set_page_config(page_title = "Athletics Performance Trends", layout="wide", initial_sidebar_state="collapsed")
@@ -35,9 +49,8 @@ top_x = st.number_input("Top X Performances", min_value=10, max_value=1000, valu
 run_analysis = st.button("Run Analysis")
 
 
-# Main analysis
+# Main analysis - fetch results and create dataframes
 if run_analysis:
-
     years = range(start_year, end_year + 1)
     placeholder = st.empty()
 
@@ -56,8 +69,8 @@ if run_analysis:
 
     placeholder.empty()
 
-    all_results_df: pd.DataFrame | None = None
-    trend_df: pd.DataFrame | None = None
+    all_results_df: pd.DataFrame | None = None    # raw detailed data for every athlete and year
+    trend_df: pd.DataFrame | None = None          # summarized trend data (average mark per year)
 
     if not all_year_dfs:
         st.warning("No data available — please check site connectivity or try another event.")
@@ -81,47 +94,31 @@ if run_analysis:
         ax.set_xlabel("Year")
         ax.grid(True)
 
-        if units == "seconds":
-            ax.set_ylabel("Average Time (s)")
-            ax.yaxis.set_major_formatter(mticker.FuncFormatter(seconds_to_hms_label))
-        elif units == "points":
-            ax.set_ylabel(f"Average Points")
-            ax.yaxis.set_major_formatter(mticker.StrMethodFormatter("{x:.0f}"))
-        else:
-            ax.set_ylabel(f"Average Distance ({units})")
-            ax.yaxis.set_major_formatter(mticker.StrMethodFormatter("{x:.2f}"))
+        ax.set_ylabel(Y_LABELS.get(units, f"Average Performance ({units})"))
+        ax.yaxis.set_major_formatter(Y_FORMATTERS.get(units, mticker.StrMethodFormatter("{x:.2f}")))
 
         ax.xaxis.set_major_locator(mticker.MaxNLocator(integer=True))
         st.pyplot(fig)
 
         # build display column
-        if units == "seconds":
-            trend_df["AverageMark_display"] = trend_df["AverageMark"].apply(lambda x: seconds_to_hms_label(x, None))
-            table_df = trend_df[["Year", "AverageMark_display"]].rename(columns={"AverageMark_display": "Average Performance"})
-            with st.expander("View Data Table"):
-                st.dataframe(table_df, width=800, hide_index=True)
-        elif units == "points":
-            table_df = trend_df[["Year", "AverageMark"]].rename(columns={"AverageMark": "Average Performance"})
-            with st.expander("View Data Table"):
-                st.dataframe(table_df.style.format({"Average Performance": "{:.0f}"}), width=600, hide_index=True)
-        else:
-            table_df = trend_df[["Year", "AverageMark"]].rename(columns={"AverageMark": "Average Performance"})
-            with st.expander("View Data Table"):
-                st.dataframe(table_df.style.format({"Average Performance": "{:.2f}"}), width=600, hide_index=True)
+        trend_df["Average Performance"] = trend_df["AverageMark"].apply(lambda x: format_performance_value(x, units))
+        display_df = trend_df[["Year", "Average Performance"]]
+
+        with st.expander("View Data Table"):
+            show_dataframe(display_df)
 
         with st.expander("View Athlete Rankings"):
-            athlete_display = format_athlete_best_results(all_results_df, event_display_name)
+            athlete_display = format_athlete_best_results(all_results_df, event_display_name)    # DataFrame of sorted athletes
             if not athlete_display.empty:
-                if units == "seconds":
-                    athlete_display["Best Result"] = athlete_display["Best Result"].apply(lambda x: seconds_to_hms_label(x, None))
-                    athlete_display.rename(columns={"Best Result": "Best Performance"}, inplace=True)
-                    st.dataframe(athlete_display, width=1200, hide_index=True, column_config={ "Profile Link": st.column_config.LinkColumn(label="Profile", display_text="🔗")})
-                elif units == "points":
-                    athlete_display.rename(columns={"Best Result": "Best Performance"}, inplace=True)
-                    st.dataframe(athlete_display.style.format({"Best Performance": "{:.0f}"}), width=1200, hide_index=True, column_config={ "Profile Link": st.column_config.LinkColumn(label="Profile", display_text="🔗") })
-                else:
-                    athlete_display.rename(columns={"Best Result": "Best Performance"}, inplace=True)
-                    st.dataframe(athlete_display.style.format({"Best Performance": "{:.2f}"}), width=1200, hide_index=True, column_config={ "Profile Link": st.column_config.LinkColumn(label="Profile", display_text="🔗") })
+                athlete_display["Best Performance"] = athlete_display["Best Performance"].apply(lambda x: format_performance_value(x, units))
+
+
+
+                st.dataframe(athlete_display, width=1200, hide_index=True,
+                    column_config={
+                        "Profile Link": st.column_config.LinkColumn(label="Profile", display_text="🔗")
+                    },
+                )
             else:
                 st.warning("No athlete results to display.")
 

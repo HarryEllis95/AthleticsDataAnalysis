@@ -11,8 +11,6 @@ from src.data_format import normalize_marks
 
 # Scrapes required data
 def fetch_toplist(event_url: str, amount: int = 100, delay: float = 0.1, output_folder: str | None = None) -> pd.DataFrame | None:
-
-    max_pages = 10
     amount_per_page = 100
     pageNum = ceil(amount / amount_per_page)
     all_rows=[]
@@ -72,9 +70,9 @@ def fetch_toplist(event_url: str, amount: int = 100, delay: float = 0.1, output_
 
     # convert to pandas DataFrame
     df = pd.DataFrame(all_rows)
-    df = normalize_marks(df)
+    df = normalize_marks(df)    # unit formatting
 
-    # Returned Columns:
+    # Expect Returned Columns:
     # ['Rank', 'Mark', 'WIND', 'Competitor_link', 'Competitor', 'DOB', 'Nat', 'Pos', '', 'Venue', 'Date', 'ResultScore', 'Mark_original']
 
     if output_folder:
@@ -92,35 +90,7 @@ def fetch_toplist(event_url: str, amount: int = 100, delay: float = 0.1, output_
 # use streamlits in built caching - basically if func is called again with same arguments,
 # don't rerun just return saved cahced result
 @st.cache_data(show_spinner=False)
-def collect_all_results(event_category: str, event_name: str, gender: str, years: range, top_x: int, _progress_callback=None):
-    """Fetch and combine results for all selected years."""
-    all_year_dfs = []
-    yearly_averages = []
-
-    for year in years:
-        # always user to see which year's data is getting fetched
-        if _progress_callback:
-            _progress_callback(year)
-        url = build_event_url(event_category, event_name, gender, year)
-        df = fetch_toplist(url, amount=top_x)
-        if df is None or "Mark" not in df.columns:
-            continue
-
-        df["Year"] = year
-        all_year_dfs.append(df)
-
-        avg_mark = pd.to_numeric(df["Mark"], errors="coerce").head(top_x).mean()
-        yearly_averages.append({"Year": year, "AverageMark": avg_mark})
-
-    if not all_year_dfs:
-        return None, None
-
-    combined_df = pd.concat(all_year_dfs, ignore_index=True)  # every scraped row for all requested years, concatenated
-    trend_df = pd.DataFrame(yearly_averages)  # one row per year with the average of the top X marks
-    return combined_df, trend_df
-
-@st.cache_data(show_spinner=False)
-def fetch_year(event_category: str, event_name: str, gender: str, year: int, top_x: int):
+def fetch_year(event_category: str, event_name: str, gender: str, year: int, top_x: int) -> pd.DataFrame | None:
     url = build_event_url(event_category, event_name, gender, year)
     df = fetch_toplist(url, amount=top_x)
     return df
