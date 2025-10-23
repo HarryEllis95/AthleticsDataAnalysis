@@ -57,6 +57,15 @@ if "all_results_df" not in st.session_state:
 
 # Main analysis - fetch results and create dataframes
 if run_analysis:
+
+    st.session_state.analysis_params = {
+        "top_x": top_x,
+        "gender": gender,
+        "event_display_name": event_display_name,
+        "start_year": start_year,
+        "end_year": end_year
+    }
+
     years = range(start_year, end_year + 1)
     placeholder = st.empty()
 
@@ -90,7 +99,15 @@ all_results_df = st.session_state.all_results_df
 
 # Display Resuls
 if trend_df is not None and not trend_df.empty:
-    units = get_event_units(event_display_name)
+
+    params = st.session_state.get("analysis_params", {})
+    top_x_used = params.get("top_x", top_x)
+    gender_used = params.get("gender", gender)
+    event_display_name_used = params.get("event_display_name", event_display_name)
+    start_year_used = params.get("start_year", start_year)
+    end_year_used = params.get("end_year", end_year)
+
+    units = get_event_units(event_display_name_used)
 
     trend_df["Year"] = trend_df["Year"].astype(int)
     if units != "seconds":
@@ -100,7 +117,11 @@ if trend_df is not None and not trend_df.empty:
     fig, ax = plt.subplots(figsize=(10, 5))
     ax.plot(trend_df["Year"], trend_df["AverageMark"], marker="o", linewidth=2, color="tab:blue")
 
-    ax.set_title(f"Average of Top {top_x} {gender.title()} {event_display_name.replace('-', ' ')} Performances ({start_year}–{end_year})")
+    ax.set_title(
+        f"Average of Top {top_x_used} {gender_used.title()} "
+        f"{event_display_name_used.replace('-', ' ')} Performances "
+        f"({start_year_used}–{end_year_used})"
+    )
     ax.set_xlabel("Year")
     ax.grid(True)
 

@@ -68,7 +68,7 @@ def fetch_toplist(event_url: str, amount: int = 100, delay: float = 0.1, output_
         print("No rows found in table.")
         return None
 
-    # TODO - worth seeing if there's a nice way to only get required results at scraping stage, much more efficient
+    # worth seeing if there's a nice way to only get required results at scraping stage, much more efficient
     if len(all_rows) > amount:
         all_rows = all_rows[:amount]
 
