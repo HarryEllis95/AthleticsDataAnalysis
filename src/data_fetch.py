@@ -11,7 +11,7 @@ from src.data_format import normalize_marks
 
 # Scrapes required data
 def fetch_toplist(event_url: str, amount: int = 100, delay: float = 0.1, output_folder: str | None = None) -> pd.DataFrame | None:
-    amount_per_page = 100
+    amount_per_page = 100  # not ideal hard coding this - consistent value of iaaf website though
     pageNum = ceil(amount / amount_per_page)
     all_rows=[]
     for page_num in range(1, pageNum + 1):
@@ -21,7 +21,7 @@ def fetch_toplist(event_url: str, amount: int = 100, delay: float = 0.1, output_
             "User-Agent": "Mozilla/5.0 (compatible; AthleticsDataBot/1.0; +https://worldathletics.org)"
         }
 
-        paged_url = f"{event_url}?page={page_num}"
+        paged_url = f"{event_url}?page={page_num}&bestResultsOnly=false"
         try:
             response = requests.get(paged_url, headers=headers, timeout=20)
             response.raise_for_status()
@@ -61,12 +61,16 @@ def fetch_toplist(event_url: str, amount: int = 100, delay: float = 0.1, output_
 
         all_rows.extend(rows_data)
         if len(all_rows) >= amount:
-            print("Reached requested amount.")
+            # reached requested amount
             break
 
     if not all_rows:
         print("No rows found in table.")
         return None
+
+    # TODO - worth seeing if there's a nice way to only get required results at scraping stage, much more efficient
+    if len(all_rows) > amount:
+        all_rows = all_rows[:amount]
 
     # convert to pandas DataFrame
     df = pd.DataFrame(all_rows)
@@ -97,7 +101,7 @@ def fetch_year(event_category: str, event_name: str, gender: str, year: int, top
 
 def build_event_url(event_category: str, event_name: str, gender: str, year: int) -> str:
     base_url = "https://worldathletics.org/records/toplists"
-    return f"{base_url}/{event_category}/{event_name}/all/{gender}/senior/{year}?bestResultsOnly=false"
+    return f"{base_url}/{event_category}/{event_name}/all/{gender}/senior/{year}"
 
 if __name__ == "__main__":
     # test run
