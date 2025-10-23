@@ -48,6 +48,12 @@ top_x = st.number_input("Top X Performances", min_value=10, max_value=1000, valu
 
 run_analysis = st.button("Run Analysis")
 
+# initialize persistent storage
+if "trend_df" not in st.session_state:
+    st.session_state.trend_df = None
+if "all_results_df" not in st.session_state:
+    st.session_state.all_results_df = None
+
 
 # Main analysis - fetch results and create dataframes
 if run_analysis:
@@ -69,60 +75,75 @@ if run_analysis:
 
     placeholder.empty()
 
-    all_results_df: pd.DataFrame | None = None    # raw detailed data for every athlete and year
-    trend_df: pd.DataFrame | None = None          # summarized trend data (average mark per year)
-
     if not all_year_dfs:
         st.warning("No data available — please check site connectivity or try another event.")
     else:
-        all_results_df = pd.concat(all_year_dfs, ignore_index=True)
-        trend_df = pd.DataFrame(yearly_averages)
+        st.session_state.all_results_df = pd.concat(all_year_dfs, ignore_index=True)
+        st.session_state.trend_df = pd.DataFrame(yearly_averages)
+
+#  use session state values
+trend_df = st.session_state.trend_df
+all_results_df = st.session_state.all_results_df
+
+# if all_results_df is not None:
+#     print(f"✅ Total performances fetched: {len(all_results_df)}")
 
 # Display Resuls
-    if trend_df is not None and not trend_df.empty:
-        units = get_event_units(event_display_name)
+if trend_df is not None and not trend_df.empty:
+    units = get_event_units(event_display_name)
 
-        trend_df["Year"] = trend_df["Year"].astype(int)
-        if units != "seconds":
-            trend_df["AverageMark"] = trend_df["AverageMark"].round(2)
+    trend_df["Year"] = trend_df["Year"].astype(int)
+    if units != "seconds":
+        trend_df["AverageMark"] = trend_df["AverageMark"].round(2)
 
-        # configure plot
-        fig, ax = plt.subplots(figsize=(10, 5))
-        ax.plot(trend_df["Year"], trend_df["AverageMark"], marker="o", linewidth=2, color="tab:blue")
+    # configure plot
+    fig, ax = plt.subplots(figsize=(10, 5))
+    ax.plot(trend_df["Year"], trend_df["AverageMark"], marker="o", linewidth=2, color="tab:blue")
 
-        ax.set_title(f"Average of Top {top_x} {gender.title()} {event_display_name.replace('-', ' ')} Performances ({start_year}–{end_year})")
-        ax.set_xlabel("Year")
-        ax.grid(True)
+    ax.set_title(f"Average of Top {top_x} {gender.title()} {event_display_name.replace('-', ' ')} Performances ({start_year}–{end_year})")
+    ax.set_xlabel("Year")
+    ax.grid(True)
 
-        ax.set_ylabel(Y_LABELS.get(units, f"Average Performance ({units})"))
-        ax.yaxis.set_major_formatter(Y_FORMATTERS.get(units, mticker.StrMethodFormatter("{x:.2f}")))
+    ax.set_ylabel(Y_LABELS.get(units, f"Average Performance ({units})"))
+    ax.yaxis.set_major_formatter(Y_FORMATTERS.get(units, mticker.StrMethodFormatter("{x:.2f}")))
 
-        ax.xaxis.set_major_locator(mticker.MaxNLocator(integer=True))
-        st.pyplot(fig)
+    ax.xaxis.set_major_locator(mticker.MaxNLocator(integer=True))
+    st.pyplot(fig)
 
-        # build display column
-        trend_df["Average Performance"] = trend_df["AverageMark"].apply(lambda x: format_performance_value(x, units))
-        display_df = trend_df[["Year", "Average Performance"]]
+    # build display column
+    trend_df["Average Performance"] = trend_df["AverageMark"].apply(lambda x: format_performance_value(x, units))
+    display_df = trend_df[["Year", "Average Performance"]]
 
-        with st.expander("View Data Table"):
-            show_dataframe(display_df)
+    with st.expander("View Data Table", expanded=True):
+        show_dataframe(display_df)
 
-        with st.expander("View Athlete Rankings"):
-            athlete_display = format_athlete_best_results(all_results_df, event_display_name)    # DataFrame of sorted athletes
-            if not athlete_display.empty:
-                athlete_display["Best Performance"] = athlete_display["Best Performance"].apply(lambda x: format_performance_value(x, units))
-
-
-
-                st.dataframe(athlete_display, width=1200, hide_index=True,
-                    column_config={
-                        "Profile Link": st.column_config.LinkColumn(label="Profile", display_text="🔗")
-                    },
-                )
-            else:
-                st.warning("No athlete results to display.")
-
+    athlete_filter = st.text_input("Search Athletes", placeholder="Type a name...", key="athlete_filter")
+    athlete_display = format_athlete_best_results(all_results_df, event_display_name) # DataFrame of sorted athletes
+    if athlete_filter:
+        filtered_athlete = athlete_display["Athlete"].str.contains(athlete_filter, case=False, na=False)
+        athlete_display_filtered = athlete_display[filtered_athlete].copy()
     else:
-        st.warning("No data available — please check site connectivity or try another event.")
+        athlete_display_filtered = athlete_display.copy()
+
+    with st.expander("View Athlete Rankings", expanded=True):
+        if not athlete_display_filtered.empty:
+            athlete_display_filtered["Best Performance"] = athlete_display_filtered["Best Performance"].apply(lambda x: format_performance_value(x, units))
+            st.dataframe(athlete_display_filtered, width=1200, hide_index=True,
+                column_config={
+                    "Profile Link": st.column_config.LinkColumn(label="Profile", display_text="🔗")
+                },
+            )
+        else:
+            st.warning("No athlete results to display.")
+
+    competitors = athlete_display_filtered["Athlete"].values.tolist()
+    athlete_one  = st.selectbox("Select Athlete One", competitors, index=0, width=400)
+    athlete_two = st.selectbox("Select Athlete Two", competitors, index=0, width=400)
+
+    if athlete_one is not None or athlete_two is not None:
+        run_comparison = st.button("Run Comparison")
+
+elif run_analysis:
+    st.warning("No data available — please check site connectivity or try another event.")
 else:
     st.info("Configure your settings and click **Run Analysis** to begin.")
