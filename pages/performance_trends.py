@@ -158,11 +158,57 @@ if trend_df is not None and not trend_df.empty:
             st.warning("No athlete results to display.")
 
     competitors = athlete_display_filtered["Athlete"].values.tolist()
-    athlete_one  = st.selectbox("Select Athlete One", competitors, index=0, width=400)
-    athlete_two = st.selectbox("Select Athlete Two", competitors, index=0, width=400)
+    col1, col2 = st.columns(2)
+    with col1:
+        athlete_one = st.selectbox("Select Athlete One", competitors, index=0, key="athlete_one")
+    with col2:
+        remaining = [a for a in competitors if a != athlete_one]
+        athlete_two = st.selectbox("Select Athlete Two", remaining, index=None, key="athlete_two",
+                                   placeholder="Choose athlete...")
 
-    if athlete_one is not None or athlete_two is not None:
+    if athlete_one and athlete_two:
         run_comparison = st.button("Run Comparison")
+    elif athlete_one or athlete_two:
+        run_comparison = st.button("Run Comparison (Single Athlete)")
+    else:
+        run_comparison = False
+
+    if run_comparison:
+        selected_athletes = [a for a in [athlete_one, athlete_two] if a]
+
+        if all_results_df is None or all_results_df.empty:
+            st.warning("No data available for comparison.")
+        else:
+            df = all_results_df.copy()
+            df["Mark"] = pd.to_numeric(df["Mark"], errors="coerce")
+            df = df.dropna(subset=["Mark", "Competitor", "Year"])
+
+            fig, ax = plt.subplots(figsize=(10, 5))
+
+            best_func = "max" if units in ("metres", "points") else "min"
+
+            for athlete in selected_athletes:
+                athlete_df = df[df["Competitor"] == athlete]
+                if athlete_df.empty:
+                    continue
+
+                # group by year for average and best
+                stats = athlete_df.groupby("Year")["Mark"].agg(
+                    Average="mean",
+                    Best=best_func
+                ).reset_index()
+
+                ax.plot(stats["Year"], stats["Average"], marker="o", linestyle="-", label=f"{athlete} (Average)")
+                ax.plot(stats["Year"], stats["Best"], marker="x", linestyle="--", label=f"{athlete} (Best)")
+
+            ax.set_title("Athlete Performance Comparison by Year")
+            ax.set_xlabel("Year")
+            ax.set_ylabel(f"Performance ({units})")
+            ax.legend()
+            ax.grid(True)
+
+            st.pyplot(fig)
+
 
 elif run_analysis:
     st.warning("No data available — please check site connectivity or try another event.")
